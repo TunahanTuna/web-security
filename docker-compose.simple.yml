@@ -1,37 +1,27 @@
 version: '3.8'
 
 services:
-  # Tuna Security Scanner (Docker Hub'dan)
+  # Ana Uygulama (Basit SQLite)
   web:
     image: mustafatunahantuna/tuna_zap:latest
-    container_name: tuna_security_scanner
+    container_name: security_app
     ports:
       - "5000:5000"
     environment:
-      - FLASK_ENV=production
-      - FLASK_DEBUG=0
-      - DATABASE_URL=sqlite:///app.db
+      FLASK_ENV: production
+      SECRET_KEY: simple-secret-key
     volumes:
-      - ./data:/app/data
-      - ./reports:/app/zap-reports
-    depends_on:
-      - zap
-    restart: unless-stopped
+      - app_data:/app/instance
 
-  # OWASP ZAP Scanner
+  # ZAP Tarayıcı
   zap:
-    image: zaproxy/zap-stable:latest
-    container_name: tuna_zap_scanner
-    user: root
+    image: zaproxy/zap-stable
+    container_name: zap_scanner
     ports:
       - "8080:8080"
-    volumes:
-      - ./reports:/zap/wrk
     command: >
-      zap.sh -daemon 
-      -host 0.0.0.0 
-      -port 8080 
-      -config api.addrs.addr.name=.* 
-      -config api.addrs.addr.regex=true 
+      zap.sh -daemon -host 0.0.0.0 -port 8080 
       -config api.disablekey=true
-    restart: unless-stopped 
+
+volumes:
+  app_data: 

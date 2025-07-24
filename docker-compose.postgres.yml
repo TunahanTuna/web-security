@@ -1,0 +1,75 @@
+services:
+  # PostgreSQL Veritabanı
+  postgres:
+    image: postgres:15-alpine
+    container_name: tuna_postgres
+    environment:
+      POSTGRES_DB: security_scanner
+      POSTGRES_USER: tuna_user
+      POSTGRES_PASSWORD: tuna123password
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tuna_user -d security_scanner"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # Ana Güvenlik Uygulaması
+  web:
+    image: mustafatunahantuna/tuna_zap:debug
+    container_name: tuna_security_app
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://tuna_user:tuna123password@postgres:5432/security_scanner
+      FLASK_ENV: production
+      SECRET_KEY: tuna-security-secret-key-2025
+    volumes:
+      - scan_data:/app/data
+      - scan_reports:/app/zap-reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      zap:
+        condition: service_started
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: tuna_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # OWASP ZAP Scanner
+  zap:
+    image: zaproxy/zap-stable
+    container_name: tuna_zap
+    ports:
+      - "8080:8080"
+    volumes:
+      - zap_reports:/zap/wrk
+    command: >
+      zap.sh -daemon -host 0.0.0.0 -port 8080 
+      -config api.disablekey=true
+      -config api.incerrordetails=true
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  scan_data:
+  scan_reports:
+  zap_reports:
+  redis_data: 

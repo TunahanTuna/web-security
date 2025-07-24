@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
   # Ana Flask uygulaması
@@ -9,13 +9,38 @@ services:
     environment:
       - FLASK_ENV=development
       - FLASK_DEBUG=1
-      - DATABASE_URL=sqlite:///app.db
+      - DATABASE_URL=postgresql://dev_user:dev_password@postgres:5432/security_scanner_dev
+      - SECRET_KEY=development-secret-key
     volumes:
       - .:/app
       - ./data:/app/data
     depends_on:
-      - redis
-      - zap
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      zap:
+        condition: service_started
+
+  # PostgreSQL Veritabanı (Development için)
+  postgres:
+    image: postgres:15-alpine
+    container_name: dev_postgres
+    environment:
+      POSTGRES_DB: security_scanner_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev_user -d security_scanner_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
 
   # Redis (Celery için - gelecekte)
   redis:
@@ -48,4 +73,5 @@ services:
       - ZAP_PROXY_PORT=8080
 
 volumes:
+  postgres_dev_data:
   redis_data: 

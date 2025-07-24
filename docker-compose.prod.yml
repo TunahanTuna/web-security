@@ -10,14 +10,18 @@ services:
     environment:
       - FLASK_ENV=${FLASK_ENV:-production}
       - FLASK_DEBUG=${FLASK_DEBUG:-0}
-      - DATABASE_URL=${DATABASE_URL:-sqlite:///app.db}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-tuna_user}:${POSTGRES_PASSWORD:-secure_db_password}@postgres:5432/${POSTGRES_DB:-security_scanner}}
       - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-this}
     volumes:
       - scan_data:/app/data
       - scan_reports:/app/zap-reports
     depends_on:
-      - redis
-      - zap
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      zap:
+        condition: service_started
     restart: unless-stopped
     networks:
       - security_network
@@ -69,14 +73,19 @@ services:
     image: postgres:15-alpine
     container_name: tuna_postgres
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-security_scanner}
-      - POSTGRES_USER=${POSTGRES_USER:-tuna_user}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secure_db_password}
+      POSTGRES_DB: ${POSTGRES_DB:-security_scanner}
+      POSTGRES_USER: ${POSTGRES_USER:-tuna_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_db_password}
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tuna_user} -d ${POSTGRES_DB:-security_scanner}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
     networks:
       - security_network

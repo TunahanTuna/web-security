@@ -28,18 +28,23 @@ def run_zap_scan(scan_id):
             zap_url = "http://zap:8080"  # Docker Compose service ismi
             
             # ZAP'ın hazır olup olmadığını kontrol et
-            print("ZAP servisine bağlanıyor...")
-            for attempt in range(30):  # 30 saniye bekle
+            print("🔍 ZAP servisine bağlanıyor...")
+            for attempt in range(60):  # 60 saniye bekle
                 try:
-                    response = requests.get(f"{zap_url}/JSON/core/view/version/", timeout=5)
+                    response = requests.get(f"{zap_url}/JSON/core/view/version/", timeout=10)
                     if response.status_code == 200:
-                        print(f"✅ ZAP hazır: {response.json()['version']}")
+                        version_info = response.json()
+                        print(f"✅ ZAP hazır! Version: {version_info.get('version', 'Unknown')}")
                         break
-                except Exception:
-                    print(f"ZAP bekleniyor... ({attempt + 1}/30)")
-                    time.sleep(1)
+                except requests.exceptions.ConnectionError:
+                    print(f"⏳ ZAP bağlantısı bekleniyor... ({attempt + 1}/60)")
+                except requests.exceptions.Timeout:
+                    print(f"⚠️ ZAP timeout, tekrar deneniyor... ({attempt + 1}/60)")
+                except Exception as e:
+                    print(f"❌ ZAP hatası: {str(e)} ({attempt + 1}/60)")
+                time.sleep(2)
             else:
-                raise Exception("ZAP servisi başlatılamadı")
+                raise Exception("ZAP servisi 120 saniyede başlatılamadı!")
             
             # Mevcut siteleri temizle
             requests.get(f"{zap_url}/JSON/core/action/newSession/")
@@ -100,6 +105,20 @@ def run_zap_scan(scan_id):
 
         except Exception as e:
             scan.status = 'FAILED'
-            print(f"❌ ZAP Tarama başarısız: {str(e)}")
+            error_msg = f"ZAP tarama başarısız: {str(e)}"
+            print(f"❌ Hata: {error_msg}")
+            
+            # Hata detaylarını vulnerability olarak kaydet (debug için)
+            error_vuln = Vulnerability(
+                name="ZAP Scan Error",
+                description=error_msg,
+                severity="INFO",
+                confidence="HIGH",
+                solution="ZAP servisini kontrol edin",
+                scan_id=scan.id
+            )
+            db.session.add(error_vuln)
+            
         finally:
-            db.session.commit() 
+            db.session.commit()
+            print(f"📊 Tarama tamamlandı: {target_url} - Status: {scan.status}") 
