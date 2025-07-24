@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # Ana Flask uygulaması
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - DATABASE_URL=sqlite:///app.db
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    depends_on:
+      - redis
+      - zap
+
+  # Redis (Celery için - gelecekte)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # OWASP ZAP (güvenlik taraması için)
+  zap:
+    image: zaproxy/zap-stable
+    user: root
+    volumes:
+      - ./zap-reports:/zap/wrk
+    command: >
+      bash -c "
+      zap.sh -daemon 
+      -host 0.0.0.0 
+      -port 8080 
+      -config api.addrs.addr.name=.* 
+      -config api.addrs.addr.regex=true 
+      -config api.disablekey=true
+      -config api.incerrordetails=true
+      -config proxy.disablekey=true
+      "
+    ports:
+      - "8080:8080"
+    environment:
+      - ZAP_PROXY_PORT=8080
+
+volumes:
+  redis_data: 

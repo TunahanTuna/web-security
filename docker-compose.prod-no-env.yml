@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  # Ana Flask Güvenlik Tarama Uygulaması (Docker Hub'dan)
+  web:
+    image: mustafatunahantuna/tuna_zap:latest
+    container_name: tuna_security_scanner
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+      - DATABASE_URL=postgresql://tuna_user:secure_db_password@postgres:5432/security_scanner
+      - SECRET_KEY=your-super-secret-key-change-this-in-production
+    volumes:
+      - scan_data:/app/data
+      - scan_reports:/app/zap-reports
+    depends_on:
+      - redis
+      - zap
+      - postgres
+    restart: unless-stopped
+    networks:
+      - security_network
+
+  # OWASP ZAP Güvenlik Tarayıcı
+  zap:
+    image: zaproxy/zap-stable:latest
+    container_name: tuna_zap_scanner
+    user: root
+    volumes:
+      - zap_reports:/zap/wrk
+      - zap_sessions:/root/.ZAP
+    command: >
+      bash -c "
+      zap.sh -daemon 
+      -host 0.0.0.0 
+      -port 8080 
+      -config api.addrs.addr.name=.* 
+      -config api.addrs.addr.regex=true 
+      -config api.disablekey=true
+      -config api.incerrordetails=true
+      -config proxy.disablekey=true
+      "
+    ports:
+      - "8080:8080"
+    environment:
+      - ZAP_PROXY_PORT=8080
+    restart: unless-stopped
+    networks:
+      - security_network
+
+  # Redis Cache ve Session Store
+  redis:
+    image: redis:7-alpine
+    container_name: tuna_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass securepassword123
+    environment:
+      - REDIS_PASSWORD=securepassword123
+    restart: unless-stopped
+    networks:
+      - security_network
+
+  # PostgreSQL Veritabanı
+  postgres:
+    image: postgres:15-alpine
+    container_name: tuna_postgres
+    environment:
+      - POSTGRES_DB=security_scanner
+      - POSTGRES_USER=tuna_user
+      - POSTGRES_PASSWORD=secure_db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - security_network
+
+  # Nginx Reverse Proxy (İsteğe Bağlı)
+  nginx:
+    image: nginx:alpine
+    container_name: tuna_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - web
+    restart: unless-stopped
+    networks:
+      - security_network
+    # Nginx'i devre dışı bırakmak için profil kullan
+    profiles:
+      - with-nginx
+
+volumes:
+  # Uygulama verileri
+  scan_data:
+    driver: local
+  scan_reports:
+    driver: local
+  zap_reports:
+    driver: local
+  zap_sessions:
+    driver: local
+  
+  # Veritabanı verileri
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  
+  # Logs
+  nginx_logs:
+    driver: local
+
+networks:
+  security_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16 
