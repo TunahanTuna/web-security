@@ -21,7 +21,7 @@ services:
 
   # Ana Güvenlik Uygulaması
   web:
-    image: mustafatunahantuna/tuna_zap:debug
+    image: mustafatunahantuna/tuna_zap:latest
     container_name: tuna_security_app
     ports:
       - "5000:5000"
